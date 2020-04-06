@@ -11,7 +11,7 @@ public class NFAOp {
     /**
      * 归纳基底：仅包含 ε 的 nfa
      */
-    public static Table fromEpsilon() {
+    private static Table fromEpsilon() {
         State start = State.create(false);
         State end = State.create(true);
         start.addEpsilonTransitions(end);
@@ -21,7 +21,7 @@ public class NFAOp {
     /**
      * 归纳基底：仅包含符号的 nfa
      */
-    public static Table fromSymbol(Character symbol) {
+    private static Table fromSymbol(Character symbol) {
         State start = State.create(false);
         State end = State.create(true);
         start.addTransition(symbol, end);
@@ -31,7 +31,7 @@ public class NFAOp {
     /**
      * 两个 nfa 的连接
      */
-    public static Table concat(Table first, Table second) {
+    private static Table concat(Table first, Table second) {
         first.getEnd().addEpsilonTransitions(second.getStart());
         first.getEnd().setEnd(false);
         return Table.of(first.getStart(), second.getEnd());
@@ -40,7 +40,7 @@ public class NFAOp {
     /**
      * 两个 nfa 的并
      */
-    public static Table union(Table first, Table second) {
+    private static Table union(Table first, Table second) {
         State newStart = State.create(false);
         newStart.addEpsilonTransitions(first.getStart());
         newStart.addEpsilonTransitions(second.getStart());
@@ -56,7 +56,7 @@ public class NFAOp {
     /**
      * nfa 的闭包
      */
-    public static Table closure(Table nfa) {
+    private static Table closure(Table nfa) {
         State newStart = State.create(false);
         State newEnd = State.create(true);
 
@@ -111,7 +111,7 @@ public class NFAOp {
      * @param position
      * @return
      */
-    public static boolean recursiveBacktrackingSearch(State state, Set<State> visited, String input, int position) {
+    private static boolean recursiveBacktrackingSearch(State state, Set<State> visited, String input, int position) {
         if (visited.contains(state)) {
             return false;
         }
@@ -138,13 +138,48 @@ public class NFAOp {
         }
     }
 
-    public static Table convertNFAToDFA(Table nfa) {
-        //TODO
-        return null;
-    }
-
     public static boolean recognizeByDFS(Table nfa, String word) {
         return recursiveBacktrackingSearch(nfa.getStart(), new HashSet<>(), word, 0);
+    }
+
+    /**
+     * 计算 NFA 状态 state 的 ε-闭包
+     * visited 防止无限递归
+     */
+    private static Set<State> eclose(State state, Set<State> visited) {
+        Set<State> res = new HashSet<>();
+        if (!visited.contains(state)) {
+            // 1) 自身
+            res.add(state);
+            visited.add(state);
+        }
+        // 2) 递归求 eclose(ε-trainsitions)
+        res.addAll(state.getEpsilonTransitions().stream()
+                .map(s -> eclose(s, visited))
+                .reduce((r, s) -> {
+                    r.addAll(s);
+                    return r;
+                }).orElse(new HashSet<>()));
+        return res;
+    }
+
+    private static boolean multipleStatesSearch(Table nfa, String word) {
+        Set<State> currentStates = eclose(nfa.getStart(), new HashSet<>());
+        for (char symbol : word.toCharArray()) {
+            Set<State> nextStates = new HashSet<>();
+            for (State state : currentStates) {
+                State next = state.getTransition().get(symbol);
+                if (next != null) {
+                    nextStates = eclose(next, new HashSet<>());
+                }
+            }
+            currentStates = nextStates;
+        }
+        return currentStates.stream().anyMatch(State::isEnd);
+    }
+
+    public static boolean recognizeByMState(Table nfa, String word) {
+        return multipleStatesSearch(nfa, word);
     }
 
 }
